@@ -3,12 +3,148 @@
  */
 package lab7;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.PriorityQueue;
+
 public class Huffman {
-    public String getGreeting() {
-        return "Hello World!";
+    
+
+    // If ch is not null, node is a leaf
+    static class Node implements Comparable<Node> {
+        final int freq;
+        final Character ch;
+        final Node left, right;
+
+        Node(char ch, int freq) {
+            this.ch = ch;
+            this.freq = freq;
+            this.left = null;
+            this.right = null;
+        }
+
+        Node(Node left, Node right) {
+            this.ch = null;
+            this.freq = left.freq + right.freq;
+            this.left = left;
+            this.right = right;
+        }
+
+        public boolean isLeaf() {
+            return ch != null;
+        }
+
+        // Returns a negative integer, zero, or a positive integer depending on the comparison result
+        @Override
+        public int compareTo(Node other) {
+            int cmp = Integer.compare(this.freq, other.freq);
+            if (cmp != 0) {
+              return cmp;
+            }
+            if (this.ch != null && other.ch != null) {
+                return Character.compare(this.ch, other.ch);
+            } else if (this.ch != null) {
+                return -1;
+            } else if (other.ch != null) {
+                return 1;
+            } else {
+                return 0;
+            }
+        }
     }
 
-    public static void main(String[] args) {
-        System.out.println(new Huffman().getGreeting());
+    public static void main(String[] args) throws Exception {
+        if (args.length != 1) {
+            System.err.println("Usage: java Huffman <filename>");
+            System.exit(1);
+        }
+
+        String input = Files.readString(Paths.get(args[0]));
+        Map<Character, Integer> freqMap = countFrequencies(input);
+        Node root = buildTree(freqMap);
+        Map<Character, String> codeMap = new HashMap<>();
+        buildCodeMap(root, "", codeMap);
+        String encoded = encode(input, codeMap);
+        String decoded = decode(encoded, root);
+
+        if (input.length() < 100) {
+            System.out.println("Input string: " + input);
+            System.out.println("Encoded string: " + encoded);
+            System.out.println("Decoded string: " + decoded);
+        }
+
+        System.out.println("Decoded equals input: " + input.equals(decoded));
+        double compressionRatio = (double) encoded.length() / (input.length() * 8.0);
+        System.out.println("Compression ratio: " + compressionRatio);
+    }
+
+    // Step 1: Count character frequencies
+    // Precondition: input is not null
+    // Postcondition: The returned map contains exactly one entry per unique character in the input
+    static Map<Character, Integer> countFrequencies(String input) {
+        Map<Character, Integer> freqMap = new HashMap<>();
+        for (char c : input.toCharArray()) {
+            freqMap.put(c, freqMap.getOrDefault(c, 0) + 1);
+        }
+        return freqMap;
+    }
+
+    // Step 2: Build Huffman Tree
+    // Precondition: freqMap is not null and contains at least two entries
+    // Postcondition: the root’s freq equals the total of all frequencies in freqMap
+    static Node buildTree(Map<Character, Integer> freqMap) {
+        PriorityQueue<Node> pq = new PriorityQueue<>();
+        for (Map.Entry<Character, Integer> entry : freqMap.entrySet()) {
+            pq.add(new Node(entry.getKey(), entry.getValue()));
+        }
+
+        while (pq.size() > 1) {
+            Node a = pq.poll();
+            Node b = pq.poll();
+            pq.add(new Node(a, b));
+        }
+
+        return pq.poll();
+    }
+
+    // Step 3: Build code map from tree
+    // Precondition: root is a non-null valid Huffman tree
+    // Postcondition: entry for every character in the original input
+    static void buildCodeMap(Node node, String path, Map<Character, String> codeMap) {
+        if (node.isLeaf()) {
+            codeMap.put(node.ch, path);
+            return;
+        }
+        buildCodeMap(node.left, path + "0", codeMap);
+        buildCodeMap(node.right, path + "1", codeMap);
+    }
+
+    // Step 4: Encode string
+    // Precondition: input and buildCodeMap are not null
+    // Postcondition: Returns a string of '0's and '1's with length proportional to input
+    static String encode(String input, Map<Character, String> codeMap) {
+        StringBuilder sb = new StringBuilder();
+        for (char c : input.toCharArray()) {
+            sb.append(codeMap.get(c));
+        }
+        return sb.toString();
+    }
+
+    // Step 5: Decode bitstring
+    // Precondition: not null, bits is a string of '0's and '1's
+    // Postcondition: Returns a string that is the original input
+    static String decode(String encoded, Node root) {
+        StringBuilder sb = new StringBuilder();
+        Node current = root;
+        for (char bit : encoded.toCharArray()) {
+            current = (bit == '0') ? current.left : current.right;
+            if (current.isLeaf()) {
+                sb.append(current.ch);
+                current = root;
+            }
+        }
+        return sb.toString();
     }
 }
